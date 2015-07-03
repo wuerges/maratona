@@ -1,8 +1,7 @@
 {-# LANGUAGE ViewPatterns #-}
 
 import Data.Bits
---import Data.Maybe
---import Data.Either
+import Debug.Trace
 import qualified Data.Map as M
 import Data.Sequence as S
 
@@ -34,28 +33,57 @@ type Todo = S.Seq Int
 
 initialResult = M.fromList [(0x0000, 0), (0xFFFF, 0)]
 
-busca :: Int -> Results -> Todo -> Maybe Int
-busca t m w = case M.lookup t m of 
+busca1 :: Int -> Results -> Todo -> Maybe Int
+busca1 t m w = case M.lookup t m of 
     Just v -> Just v
     Nothing -> case expandBusca m w of 
-                    Just (m', w') -> busca t m' w'
+                    Just (m', w') -> busca1 t m' w'
                     Nothing  -> Nothing
 
-expandBusca m _ | M.null m = Just (initialResult, S.fromList $ flipts 0x0000 ++ flipts 0xFFFF)
+busca :: Int -> Maybe Int
+busca t = busca1 t M.empty S.empty
+
+expandBusca m _ | M.null m = Just (initialResult, S.fromList [0x0000, 0xFFFF])
 expandBusca m s@(viewl -> EmptyL) = Nothing
 expandBusca m (viewl -> (l :< ls))  = case M.lookup l m of
-    Nothing -> error  $ "Should have found something. m: " ++ show m ++ " l:" ++ show l 
-    Just v -> Just (M.union m $ M.fromList $ Prelude.zip (repeat $ v + 1) ns, ls >< (S.fromList ns))
-        where ns = flipts l
-              --ls' = ls :: Seq Int
+    Nothing -> error  $ "Should have found something. m: " ++ show m ++ " l:" ++ show l  ++ " s: " ++ show ls
+    Just v -> Just (M.union m m2, ls >< (S.fromList ns))
+        where ns = [f | f <- flipts l, M.notMember f m]
+              m2 = M.fromList $ Prelude.zip ns (repeat $ v + 1)
 
 
---main = mapM putStrLn (map show (zip (['0'..'9'] ++ ['A'..'F']) [0..0xf]))
+
+parseTab :: String -> Int
+parseTab ls = shift (parseL (concat $ lines ls)) (-1)
+    where parseC :: Char -> Int
+          parseC c = case c of
+            'b' -> 1
+            'w' -> 0
+            x -> error $ "Ilegal character " ++ show x
+          parseL l = foldl (\x c -> shift (x .|. (parseC c)) 1) 0x0000 l
 
 
-main = putStrLn $ show $ busca (mask 4) M.empty S.empty
+
+--main = putStrLn $ show 0x9d98 ++ " " ++ (show $ parseTab "bwwb\nbbwb\nbwwb\nbwww")
 
 
+
+
+main = do 
+    c <- getContents
+    let p = parseTab c
+    case busca p of
+        Nothing -> putStrLn "Impossible"
+        Just x -> putStrLn $ show x
+
+
+--a = 0xa :: Int
+--b = 0xa0 :: Int
+
+--main = putStrLn $ show $ shift (a .|. b) 1
+
+
+--main = putStrLn $ show $ busca 0x9D98
 
 --main = putStrLn $ prettify $ myGraph (genNodes "bwbw\nbwbw\nbwbw\nbwbw")
 
